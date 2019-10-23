@@ -11,6 +11,7 @@ module.exports = {
     path: path.resolve(__dirname, '../dist'),
     filename: '[name].js'
   },
+  context: path.resolve(__dirname, '../src'),
   plugins: [
     new CleanWebpackPlugin(),
     new HtmlWebpackPlugin({

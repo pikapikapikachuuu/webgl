@@ -9,6 +9,7 @@ module.exports = merge(common, {
     contentBase: path.join(__dirname, '../dist'),
     port: 9999,
     inline: true,
+    writeToDisk: true,
     clientLogLevel: 'error'
   }
 })

@@ -5,11 +5,15 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "node",
+      "type": "chrome",
       "request": "launch",
-      "name": "Launch Program",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"]
+      "name": "Launch Chrome against localhost",
+      "url": "http://localhost:9999",
+      "webRoot": "${workspaceFolder}/src",
+      "sourceMapPathOverrides": {
+        "webpack:///*": "${webRoot}/*"
+      },
+      // "preLaunchTask": "debug"
     }
   ]
 }
