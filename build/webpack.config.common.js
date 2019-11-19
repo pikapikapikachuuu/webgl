@@ -16,11 +16,12 @@ module.exports = {
     new CleanWebpackPlugin(),
     new HtmlWebpackPlugin({
       template: path.resolve(__dirname, '../src/index.html'),
-      filename: 'index.html'
+      filename: 'index.html',
+      favicon: path.resolve(__dirname, '../src/favicon.ico')
     })
   ],
   resolve: {
-    extensions: ['.ts', '.tsx', '.json', '.scss', '.glsl', '.js'],
+    extensions: ['.ts', '.tsx', '.json', '.css', '.glsl', '.js'],
     plugins: [
       new TsConfigPathsPlugin({
         configFileName: path.resolve(__dirname, '../tsconfig.json')
@@ -30,17 +31,20 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.tsx?$/,
-        use: ['awesome-typescript-loader'],
-        exclude: /node_modules/
-      },
-      {
         test: /\.html$/,
         loader: 'html-loader'
       },
       {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader']
+      },
+      {
+        test: /\.tsx?$/,
+        use: ['awesome-typescript-loader']
+      },
+      {
         test: /\.glsl$/,
-        loader: 'raw-loader'
+        loader: 'ts-shader-loader'
       }
     ]
   }
