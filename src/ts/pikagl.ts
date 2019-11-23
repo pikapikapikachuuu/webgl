@@ -14,11 +14,36 @@ interface ProgramInfo {
   transformFeedbackInfo: any
 }
 
-interface BufferInfo {
+export interface BufferInfo {
   numElements: number,
   elementType?: number,
   indices?: WebGLBuffer,
   attribs?: any
+}
+
+interface VertexArrayInfo {
+  numElements: number,
+  elementType?: number,
+  vertexArrayObject?:	WebGLVertexArrayObject
+}
+
+interface DrawObject {
+  active?: boolean,
+  type?: number,
+  programInfo?: ProgramInfo,
+  bufferInfo?: BufferInfo,
+  vertexArrayInfo?: VertexArrayInfo,
+  uniforms?: any,
+  offset?: number,
+  count?: number,
+  instanceCount?: number
+}
+
+interface Defaults {
+  attribPrefix?: string,
+  textureColor?: number[],
+  crossOrigin?: string,
+  addExtensionsToContext?: boolean
 }
 
 import * as twgl from 'twgl.js'
@@ -29,6 +54,8 @@ export default class PikaGL {
   constructor (gl: WebGL2RenderingContext) {
     this.gl = gl
   }
+
+  static m4 = twgl.m4
 
   public loadShader (shaderSource: string, shaderType: number): WebGLShader {
     const shader = this.gl.createShader(shaderType)
@@ -87,11 +114,19 @@ export default class PikaGL {
     }
   }
 
-  public createBufferInfo (arrays: any): BufferInfo {
+  public createBufferInfo (arrays: Record<string, any>): BufferInfo {
     return twgl.createBufferInfoFromArrays(this.gl, arrays)
   }
 
-  private setAttributes (setters: any, buffers: any) {
+  public createTexture (options: Record<string, any>) : WebGLTexture {
+    return twgl.createTexture(this.gl, options)
+  }
+
+  public setDefaults (defaults: Defaults) {
+    return twgl.setDefaults(defaults)
+  }
+
+  private setAttributes (setters: Record<string, Function>, buffers: BufferInfo | VertexArrayInfo) {
     for (const name in buffers) {
       const setter = setters[name]
       if (setter) {
@@ -100,26 +135,26 @@ export default class PikaGL {
     }
   }
 
-  public setBuffersAndAttributes (programInfo: ProgramInfo, buffers: any) {
-    if (buffers.vertexArrayObject) {
-      this.gl.bindVertexArray(buffers.vertexArrayObject)
+  public setBuffersAndAttributes (programInfo: ProgramInfo, buffers: BufferInfo | VertexArrayInfo) {
+    if ((<VertexArrayInfo>buffers).vertexArrayObject) {
+      this.gl.bindVertexArray((<VertexArrayInfo>buffers).vertexArrayObject)
     } else {
-      this.setAttributes(programInfo.attribSetters || programInfo, buffers.attribs)
-      if (buffers.indices) {
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, buffers.indices)
+      this.setAttributes(programInfo.attribSetters || programInfo, (<BufferInfo>buffers).attribs)
+      if ((<BufferInfo>buffers).indices) {
+        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, (<BufferInfo>buffers).indices)
       }
     }
   }
 
-  public setUniforms (setters: any, values: any) {
+  public setUniforms (setters: ProgramInfo | Record<string, Function>, values: Record<string, any>) {
     const actualSetters = setters.uniformSetters || setters
     const numArgs = arguments.length
-    for (let aNdx = 1; aNdx < numArgs; ++aNdx) {
+    for (let aNdx = 1; aNdx < numArgs; aNdx++) {
       const values = arguments[aNdx]
       if (Array.isArray(values)) {
         const numValues = values.length
-        for (let ii = 0; ii < numValues; ++ii) {
-          this.setUniforms(actualSetters, values[ii])
+        for (let i = 0; i < numValues; i++) {
+          this.setUniforms(actualSetters, values[i])
         }
       } else {
         for (const name in values) {
@@ -132,9 +167,9 @@ export default class PikaGL {
     }
   }
 
-  public drawBufferInfo (bufferInfo: any, type?: number, count?: number, offset?: number, instanceCount?: number) {
+  public drawBufferInfo (bufferInfo: BufferInfo | VertexArrayInfo, type?: number, count?: number, offset?: number, instanceCount?: number) {
     type = type === undefined ? this.gl.TRIANGLES : type
-    const indices = bufferInfo.indices
+    const indices = (<BufferInfo>bufferInfo).indices
     const elementType = bufferInfo.elementType
     const numElements = count === undefined ? bufferInfo.numElements : count
     offset = offset === undefined ? 0 : offset
@@ -150,6 +185,54 @@ export default class PikaGL {
       } else {
         this.gl.drawArrays(type, offset, numElements)
       }
+    }
+  }
+
+  public drawObjects (objects: DrawObject[]) {
+    let lastUsedProgramInfo = null
+    let lastUsedBufferInfo = null
+
+    objects.forEach((object) => {
+      if (object.active === false) {
+        return
+      }
+
+      const programInfo = object.programInfo
+      const bufferInfo = object.vertexArrayInfo || object.bufferInfo
+      let bindBuffers = false
+      const type = object.type === undefined ? this.gl.TRIANGLES : object.type
+
+      if (programInfo !== lastUsedProgramInfo) {
+        lastUsedProgramInfo = programInfo
+        this.gl.useProgram(programInfo.program)
+        bindBuffers = true
+      }
+
+      if (bindBuffers || bufferInfo !== lastUsedBufferInfo) {
+        if (lastUsedBufferInfo && lastUsedBufferInfo.vertexArrayObject && !(<VertexArrayInfo>bufferInfo).vertexArrayObject) {
+          this.gl.bindVertexArray(null)
+        }
+        lastUsedBufferInfo = bufferInfo
+        this.setBuffersAndAttributes(programInfo, bufferInfo)
+      }
+
+      this.setUniforms(programInfo, object.uniforms)
+
+      this.drawBufferInfo(bufferInfo, type, object.count, object.offset, object.instanceCount)
+    })
+
+    if (lastUsedBufferInfo && lastUsedBufferInfo.vertexArrayObject) {
+      this.gl.bindVertexArray(null)
+    }
+  }
+
+  public resizeCanvasToDisplaySize (canvas: HTMLCanvasElement, multiplier = 1) {
+    multiplier = Math.max(0, multiplier)
+    const width = canvas.clientWidth * multiplier | 0
+    const height = canvas.clientHeight * multiplier | 0
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width
+      canvas.height = height
     }
   }
 }
