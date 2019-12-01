@@ -33,7 +33,6 @@
     "source-map": "^0.7.3",
     "style-loader": "^1.0.0",
     "ts-shader-loader": "^1.0.6",
-    "twgl.js": "^4.13.1",
     "typescript": "^3.6.4",
     "webpack": "^4.41.2",
     "webpack-cli": "^3.3.9",

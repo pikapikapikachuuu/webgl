@@ -2,10 +2,11 @@
 import '../style/index.css'
 
 import PikaGL from './pikagl'
+import TextureMaker from './texture'
 import { Cube } from './primitive'
 import * as chroma from 'chroma-js'
+import * as m4 from '../3rd/m4'
 
-const m4 = PikaGL.m4
 const rand = (min: number, max: number) => min + Math.random() * (max - min)
 
 // initialize
@@ -35,16 +36,12 @@ const camera = m4.identity()
 const view = m4.identity()
 const viewProjection = m4.identity()
 
-const tex = pgl.createTexture({
-  min: gl.NEAREST,
-  mag: gl.NEAREST,
-  src: [
-    255, 255, 255, 255,
-    192, 192, 192, 255,
-    192, 192, 192, 255,
-    255, 255, 255, 255
-  ]
-})
+const textureMaker = new TextureMaker(document.createElement('canvas').getContext('2d'), gl)
+const textures = [
+  textureMaker.makeCheckerTexture(),
+  textureMaker.makeCircleTexture(),
+  textureMaker.makeStripeTexture()
+]
 
 const objects = []
 const objectsToDraw = []
@@ -58,7 +55,7 @@ for (let i = 0; i < numObjects; i++) {
     u_specular: [1, 1, 1, 1],
     u_shininess: 50,
     u_specularFactor: 1,
-    u_diffuse: tex,
+    u_diffuse: textures[i % textures.length],
     u_viewInverse: camera,
     u_world: m4.identity(),
     u_worldInverseTranspose: m4.identity(),
@@ -70,7 +67,9 @@ for (let i = 0; i < numObjects; i++) {
     uniforms: uniforms
   })
   objects.push({
-    translation: [rand(-10, 10), rand(-10, 10), rand(-10, 10)],
+    xTrans: rand(-10, 10),
+    yTrans: rand(-10, 10),
+    zTrans: rand(-10, 10),
     ySpeed: rand(0.1, 0.3),
     zSpeed: rand(0.1, 0.3),
     uniforms: uniforms
@@ -99,10 +98,10 @@ const render = (time: number) => {
     const uni = object.uniforms
     const world = uni.u_world
     m4.identity(world)
-    m4.rotateY(world, time * object.ySpeed, world)
-    m4.rotateZ(world, time * object.zSpeed, world)
-    m4.translate(world, object.translation, world)
-    m4.rotateX(world, time, world)
+    m4.yRotate(world, time * object.ySpeed, world)
+    m4.zRotate(world, time * object.zSpeed, world)
+    m4.translate(world, object.xTrans, object.yTrans, object.zTrans, world)
+    m4.xRotate(world, time, world)
     m4.transpose(m4.inverse(world, uni.u_worldInverseTranspose), uni.u_worldInverseTranspose)
     m4.multiply(viewProjection, uni.u_world, uni.u_worldViewProjection)
   })
