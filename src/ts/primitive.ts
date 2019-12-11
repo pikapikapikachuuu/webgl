@@ -1,11 +1,56 @@
 import { BufferInfo } from './pikagl'
 import PikaGL from './pikagl'
 
+import * as m4 from '../3rd/m4'
+
+function applyFuncToV3Array (array, matrix, fn) {
+  const len = array.length
+  const tmp = new Float32Array(3)
+  for (let i = 0; i < len; i += 3) {
+    fn(matrix, [array[i], array[i + 1], array[i + 2]], tmp)
+    array[i] = tmp[0]
+    array[i + 1] = tmp[1]
+    array[i + 2] = tmp[2]
+  }
+}
+
+function transformNormal (mi, v, dst) {
+  dst = dst || new Float32Array(3)
+  const v0 = v[0]
+  const v1 = v[1]
+  const v2 = v[2]
+
+  dst[0] = v0 * mi[0 * 4 + 0] + v1 * mi[0 * 4 + 1] + v2 * mi[0 * 4 + 2]
+  dst[1] = v0 * mi[1 * 4 + 0] + v1 * mi[1 * 4 + 1] + v2 * mi[1 * 4 + 2]
+  dst[2] = v0 * mi[2 * 4 + 0] + v1 * mi[2 * 4 + 1] + v2 * mi[2 * 4 + 2]
+
+  return dst
+}
+
+function reorientVertices (arrays, matrix) {
+  Object.keys(arrays).forEach((name) => {
+    const array = arrays[name]
+    if (name.indexOf('pos') >= 0) {
+      applyFuncToV3Array(array, matrix, m4.transformPoint)
+    } else if (name.indexOf('tan') >= 0 || name.indexOf('binorm') >= 0) {
+      applyFuncToV3Array(array, matrix, m4.transformDirection)
+    } else if (name.indexOf('norm') >= 0) {
+      applyFuncToV3Array(array, m4.inverse(matrix), transformNormal)
+    }
+  })
+  return arrays
+}
+
 abstract class Primitive {
   protected pgl: PikaGL
+  protected _bufferInfo: BufferInfo
 
   constructor (pgl: PikaGL) {
     this.pgl = pgl
+  }
+
+  get bufferInfo (): BufferInfo {
+    return this._bufferInfo
   }
 
   private augmentTypedArray (typedArray: any, numComponents: number) {
@@ -42,12 +87,13 @@ abstract class Primitive {
 
   protected abstract createVertices (...args: any) : Record<string, any>
 
-  public abstract createBufferInfo (...args: any) : BufferInfo
+  public createBufferInfo (arrays: Record<string, any>) {
+    return this.pgl.createBufferInfo(arrays)
+  }
 }
 
 export class Cube extends Primitive {
-  protected _size: number
-  protected _bufferInfo: BufferInfo
+  private _size: number
 
   constructor (pgl: PikaGL, size: number) {
     super(pgl)
@@ -56,16 +102,11 @@ export class Cube extends Primitive {
     this._bufferInfo = this.createBufferInfo(arrays)
   }
 
-  get Size (): number {
+  get size () {
     return this._size
   }
 
-  get bufferInfo (): BufferInfo {
-    return this._bufferInfo
-  }
-
   createVertices (size: number) {
-    size = size || 1
     const k = size / 2
 
     const cornerVertices = [
@@ -133,8 +174,76 @@ export class Cube extends Primitive {
       indices: indices
     }
   }
+}
 
-  createBufferInfo (arrays: Record<string, any>) {
-    return this.pgl.createBufferInfo(arrays)
+interface PlaneSize {
+  width: number,
+  depth: number,
+  subdivisionsWidth: number,
+  subdivisionsDepth: number,
+  matrix: m4.Matrix4
+}
+
+export class Plane extends Primitive {
+  private _planeSize: PlaneSize
+
+  constructor (pgl: PikaGL, planeSize: PlaneSize) {
+    super(pgl)
+    this._planeSize = planeSize
+    const arrays = this.createVertices(planeSize)
+    this._bufferInfo = this.createBufferInfo(arrays)
+  }
+
+  get planeSize () {
+    return this._planeSize
+  }
+
+  createVertices (planeSize: PlaneSize) {
+    const { width, depth, subdivisionsWidth, subdivisionsDepth, matrix } = planeSize
+    const numVertices = (subdivisionsWidth + 1) * (subdivisionsDepth + 1)
+    const positions = this.createAugmentedTypedArray(3, numVertices)
+    const normals = this.createAugmentedTypedArray(3, numVertices)
+    const texcoords = this.createAugmentedTypedArray(2, numVertices)
+
+    for (let z = 0; z <= subdivisionsDepth; z++) {
+      for (let x = 0; x <= subdivisionsWidth; x++) {
+        const u = x / subdivisionsWidth
+        const v = z / subdivisionsDepth
+        positions.push(
+          width * u - width * 0.5,
+          0,
+          depth * v - depth * 0.5)
+        normals.push(0, 1, 0)
+        texcoords.push(u, v)
+      }
+    }
+
+    const numVertsAcross = subdivisionsWidth + 1
+    const indices = this.createAugmentedTypedArray(
+      3, subdivisionsWidth * subdivisionsDepth * 2, Uint16Array)
+
+    for (let z = 0; z < subdivisionsDepth; z++) {
+      for (let x = 0; x < subdivisionsWidth; x++) {
+      // Make triangle 1 of quad.
+        indices.push(
+          (z + 0) * numVertsAcross + x,
+          (z + 1) * numVertsAcross + x,
+          (z + 0) * numVertsAcross + x + 1)
+
+        // Make triangle 2 of quad.
+        indices.push(
+          (z + 1) * numVertsAcross + x,
+          (z + 1) * numVertsAcross + x + 1,
+          (z + 0) * numVertsAcross + x + 1)
+      }
+    }
+
+    const arrays = reorientVertices({
+      position: positions,
+      normal: normals,
+      texcoord: texcoords,
+      indices: indices
+    }, matrix)
+    return arrays
   }
 }

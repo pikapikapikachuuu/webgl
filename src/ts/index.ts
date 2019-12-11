@@ -3,7 +3,7 @@ import '../style/index.css'
 
 import PikaGL from './pikagl'
 import TextureMaker from './texture'
-import { Cube } from './primitive'
+import { Cube, Plane } from './primitive'
 import * as chroma from 'chroma-js'
 import * as m4 from '../3rd/m4'
 
@@ -16,18 +16,31 @@ const pgl = new PikaGL(gl)
 pgl.setDefaults({ attribPrefix: 'a_' })
 
 // shaders & program
-import fragmentGLSL from '../shaders/fragment.glsl'
-const fragmentShader = pgl.loadShader(fragmentGLSL, gl.FRAGMENT_SHADER)
-import vertexGLSL from '../shaders/vertex.glsl'
-const vertexShader = pgl.loadShader(vertexGLSL, gl.VERTEX_SHADER)
-const program = pgl.createProgram([fragmentShader, vertexShader])
-const programInfo = pgl.createProgramInfo(program)
+import shapeFragmentGLSL from '../shaders/shape-fragment.glsl'
+const shapeFragmentShader = pgl.loadShader(shapeFragmentGLSL, gl.FRAGMENT_SHADER)
+import shapeVertexGLSL from '../shaders/shape-vertex.glsl'
+const shapeVertexShader = pgl.loadShader(shapeVertexGLSL, gl.VERTEX_SHADER)
+const shapeProgram = pgl.createProgram([shapeFragmentShader, shapeVertexShader])
+const shapeProgramInfo = pgl.createProgramInfo(shapeProgram)
 
-// primitives
-const cube = new Cube(pgl, 2)
-const shapes = [
-  cube.bufferInfo
+import textFragmentGLSL from '../shaders/text-fragment.glsl'
+const textFragmentShader = pgl.loadShader(textFragmentGLSL, gl.FRAGMENT_SHADER)
+import textVertexGLSL from '../shaders/text-vertex.glsl'
+const textVertexShader = pgl.loadShader(textVertexGLSL, gl.VERTEX_SHADER)
+const textProgram = pgl.createProgram([textFragmentShader, textVertexShader])
+const textProgramInfo = pgl.createProgramInfo(textProgram)
+
+const shapeBufferInfos = [
+  new Cube(pgl, 2).bufferInfo
 ]
+
+const textBufferInfo = new Plane(pgl, {
+  width: 1,
+  depth: 1,
+  subdivisionsWidth: 1,
+  subdivisionsDepth: 1,
+  matrix: m4.xRotation(Math.PI * 0.5)
+}).bufferInfo
 
 // Shared values
 const lightWorldPosition = [1, 8, -10]
@@ -36,17 +49,22 @@ const camera = m4.identity()
 const view = m4.identity()
 const viewProjection = m4.identity()
 
-const textureMaker = new TextureMaker(document.createElement('canvas').getContext('2d'), gl)
-const textures = [
+const textureMaker = new TextureMaker(gl)
+const shapeTextures = [
   textureMaker.makeCheckerTexture(),
   textureMaker.makeCircleTexture(),
   textureMaker.makeStripeTexture()
 ]
+const textTextures = [
+  '我是汉字',
+  '巧了我也是'
+].map((name) => textureMaker.makeTextTexture(name))
 
-const objects = []
-const objectsToDraw = []
 const numObjects = 100
 const baseHue = rand(0, 360)
+
+const shapeObjects = []
+const shapeObjectsToDraw = []
 for (let i = 0; i < numObjects; i++) {
   const uniforms = {
     u_lightWorldPos: lightWorldPosition,
@@ -55,18 +73,42 @@ for (let i = 0; i < numObjects; i++) {
     u_specular: [1, 1, 1, 1],
     u_shininess: 50,
     u_specularFactor: 1,
-    u_diffuse: textures[i % textures.length],
+    u_diffuse: shapeTextures[i % shapeTextures.length],
     u_viewInverse: camera,
     u_world: m4.identity(),
     u_worldInverseTranspose: m4.identity(),
     u_worldViewProjection: m4.identity()
   }
-  objectsToDraw.push({
-    programInfo: programInfo,
-    bufferInfo: shapes[i % shapes.length],
+  shapeObjectsToDraw.push({
+    programInfo: shapeProgramInfo,
+    bufferInfo: shapeBufferInfos[i % shapeBufferInfos.length],
     uniforms: uniforms
   })
-  objects.push({
+  shapeObjects.push({
+    xTrans: rand(-10, 10),
+    yTrans: rand(-10, 10),
+    zTrans: rand(-10, 10),
+    ySpeed: rand(0.1, 0.3),
+    zSpeed: rand(0.1, 0.3),
+    uniforms: uniforms
+  })
+}
+
+const textObjects = []
+const textObjectsToDraw = []
+for (let i = 0; i < numObjects; i++) {
+  const textTexture = textTextures[i % textTextures.length]
+  const uniforms = {
+    u_texture: textTexture,
+    u_worldViewProjection: m4.identity(),
+    u_color: chroma.hsv((baseHue + rand(0, 60)) % 360, 1, 1).gl()
+  }
+  textObjectsToDraw.push({
+    programInfo: textProgramInfo,
+    bufferInfo: textBufferInfo,
+    uniforms: uniforms
+  })
+  textObjects.push({
     xTrans: rand(-10, 10),
     yTrans: rand(-10, 10),
     zTrans: rand(-10, 10),
@@ -83,6 +125,9 @@ const render = (time: number) => {
   gl.viewport(0, 0, canvas.width, canvas.height)
 
   gl.enable(gl.DEPTH_TEST)
+  gl.disable(gl.BLEND)
+  gl.depthMask(true)
+
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
   const projection = m4.perspective(30 * Math.PI / 180, canvas.clientWidth / canvas.clientHeight, 0.5, 100)
@@ -94,7 +139,7 @@ const render = (time: number) => {
   m4.inverse(camera, view)
   m4.multiply(projection, view, viewProjection)
 
-  objects.forEach((object) => {
+  shapeObjects.forEach((object) => {
     const uni = object.uniforms
     const world = uni.u_world
     m4.identity(world)
@@ -106,7 +151,27 @@ const render = (time: number) => {
     m4.multiply(viewProjection, uni.u_world, uni.u_worldViewProjection)
   })
 
-  pgl.drawObjects(objectsToDraw)
+  pgl.drawObjects(shapeObjectsToDraw)
+
+  // setup for text
+  gl.enable(gl.BLEND)
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+  gl.depthMask(false)
+
+  textObjects.forEach((object) => {
+    const uni = object.uniforms
+    const world = m4.identity()
+    m4.identity(world)
+    m4.yRotate(world, time * object.ySpeed, world)
+    m4.zRotate(world, time * object.zSpeed, world)
+    m4.translate(world, object.xTrans, object.yTrans, object.zTrans, world)
+    m4.xRotate(world, time, world)
+    m4.multiply(view, world, world)
+
+    m4.multiply(projection, world, uni.u_worldViewProjection)
+  })
+
+  pgl.drawObjects(textObjectsToDraw)
 
   window.requestAnimationFrame(render)
 }
