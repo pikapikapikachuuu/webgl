@@ -1,9 +1,9 @@
 /* eslint-disable camelcase */
 import '../style/index.css'
 
-import PikaGL from './pikagl'
+import PikaGL, { BufferInfo } from './pikagl'
 import TextureMaker from './texture'
-import { Cube, Plane } from './primitive'
+import { Cube, Plane, Sphere, TruncatedCone, Cylinder, RegularPrism } from './primitive'
 import * as chroma from 'chroma-js'
 import * as m4 from '../3rd/m4'
 
@@ -31,7 +31,12 @@ const textProgram = pgl.createProgram([textFragmentShader, textVertexShader])
 const textProgramInfo = pgl.createProgramInfo(textProgram)
 
 const shapeBufferInfos = [
-  new Cube(pgl, 2).bufferInfo
+  new Cube(pgl, { side: 2 }).bufferInfo,
+  new Sphere(pgl, { radius: 1, subdivisionsAxis: 32, subdivisionsHeight: 32 }).bufferInfo,
+  new Cylinder(pgl, { radius: 1, height: 2, radialSubdivisions: 32, verticalSubdivisions: 2 }).bufferInfo,
+  new RegularPrism(pgl, { numSide: 3, width: 1, height: 2, verticalSubdivisions: 1 }).bufferInfo,
+  new RegularPrism(pgl, { numSide: 5, width: 1, height: 1, verticalSubdivisions: 5 }).bufferInfo,
+  new TruncatedCone(pgl, { bottomRadius: 1, topRadius: 2, height: 2, radialSubdivisions: 32, verticalSubdivisions: 12 }).bufferInfo
 ]
 
 const textBufferInfo = new Plane(pgl, {
@@ -60,7 +65,7 @@ const textTextures = [
   '巧了我也是'
 ].map((name) => textureMaker.makeTextTexture(name))
 
-const numObjects = 100
+const numObjects = 66
 const baseHue = rand(0, 360)
 
 const shapeObjects = []
@@ -69,7 +74,7 @@ for (let i = 0; i < numObjects; i++) {
   const uniforms = {
     u_lightWorldPos: lightWorldPosition,
     u_lightColor: lightColor,
-    u_diffuseMult: chroma.hsv((baseHue + rand(0, 60)) % 360, 0.4, 0.8).gl(),
+    u_diffuseMult: chroma.hsv((baseHue + rand(0, 20)) % 360, 0.4, 0.8).gl(),
     u_specular: [1, 1, 1, 1],
     u_shininess: 50,
     u_specularFactor: 1,

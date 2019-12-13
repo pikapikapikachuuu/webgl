@@ -1,3 +1,4 @@
+/* eslint-disable no-useless-constructor */
 import { BufferInfo } from './pikagl'
 import PikaGL from './pikagl'
 
@@ -41,12 +42,29 @@ function reorientVertices (arrays, matrix) {
   return arrays
 }
 
+interface PrimitiveSize {}
+
+interface verticeArrays {
+  position: ArrayBuffer
+  normal: ArrayBuffer,
+  texcoord: ArrayBuffer,
+  indices: ArrayBuffer
+}
+
 abstract class Primitive {
   protected pgl: PikaGL
   protected _bufferInfo: BufferInfo
+  protected _size: PrimitiveSize
 
-  constructor (pgl: PikaGL) {
+  constructor (pgl: PikaGL, size: PrimitiveSize) {
     this.pgl = pgl
+    this._size = size
+    const arrays = this.createVertices(size)
+    this._bufferInfo = this.createBufferInfo(arrays)
+  }
+
+  get size (): PrimitiveSize {
+    return this._size
   }
 
   get bufferInfo (): BufferInfo {
@@ -85,39 +103,35 @@ abstract class Primitive {
     return this.augmentTypedArray(new Type(numComponents * numElements), numComponents)
   }
 
-  protected abstract createVertices (...args: any) : Record<string, any>
+  public abstract createVertices (size: PrimitiveSize) : verticeArrays
 
-  public createBufferInfo (arrays: Record<string, any>) {
+  public createBufferInfo (arrays: verticeArrays) {
     return this.pgl.createBufferInfo(arrays)
   }
 }
 
+interface CubeSize extends PrimitiveSize {
+  side: number
+}
+
 export class Cube extends Primitive {
-  private _size: number
-
-  constructor (pgl: PikaGL, size: number) {
-    super(pgl)
-    this._size = size
-    const arrays = this.createVertices(size)
-    this._bufferInfo = this.createBufferInfo(arrays)
+  constructor (pgl: PikaGL, size: CubeSize) {
+    super(pgl, size)
   }
 
-  get size () {
-    return this._size
-  }
-
-  createVertices (size: number) {
-    const k = size / 2
+  createVertices (size: CubeSize) {
+    const { side } = size
+    const s = side / 2
 
     const cornerVertices = [
-      [-k, -k, -k],
-      [+k, -k, -k],
-      [-k, +k, -k],
-      [+k, +k, -k],
-      [-k, -k, +k],
-      [+k, -k, +k],
-      [-k, +k, +k],
-      [+k, +k, +k]
+      [-s, -s, -s],
+      [+s, -s, -s],
+      [-s, +s, -s],
+      [+s, +s, -s],
+      [-s, -s, +s],
+      [+s, -s, +s],
+      [-s, +s, +s],
+      [+s, +s, +s]
     ]
 
     const faceNormals = [
@@ -143,17 +157,17 @@ export class Cube extends Primitive {
     const indices = this.createAugmentedTypedArray(3, 6 * 2, Uint16Array)
 
     const CUBE_FACE_INDICES = [
-      [3, 7, 5, 1], // right
-      [6, 2, 0, 4], // left
-      [6, 7, 3, 2], // ??
-      [0, 1, 5, 4], // ??
-      [7, 6, 4, 5], // front
-      [2, 3, 1, 0] // back
+      [3, 7, 5, 1],
+      [6, 2, 0, 4],
+      [6, 7, 3, 2],
+      [0, 1, 5, 4],
+      [7, 6, 4, 5],
+      [2, 3, 1, 0]
     ]
 
-    for (let f = 0; f < 6; ++f) {
+    for (let f = 0; f < 6; f++) {
       const faceIndices = CUBE_FACE_INDICES[f]
-      for (let v = 0; v < 4; ++v) {
+      for (let v = 0; v < 4; v++) {
         const position = cornerVertices[faceIndices[v]]
         const normal = faceNormals[f]
         const uv = uvCoords[v]
@@ -176,7 +190,203 @@ export class Cube extends Primitive {
   }
 }
 
-interface PlaneSize {
+interface SphereSize extends PrimitiveSize {
+  radius: number,
+  subdivisionsAxis: number,
+  subdivisionsHeight: number
+}
+
+export class Sphere extends Primitive {
+  private _sphereSize: SphereSize
+
+  constructor (pgl: PikaGL, size: SphereSize) {
+    super(pgl, size)
+  }
+
+  get sphereSize () {
+    return this._sphereSize
+  }
+
+  createVertices (size: SphereSize) {
+    const { radius, subdivisionsAxis, subdivisionsHeight } = size
+
+    const latRange = Math.PI
+    const longRange = (Math.PI * 2)
+
+    const numVertices = (subdivisionsAxis + 1) * (subdivisionsHeight + 1)
+    const positions = this.createAugmentedTypedArray(3, numVertices)
+    const normals = this.createAugmentedTypedArray(3, numVertices)
+    const texCoords = this.createAugmentedTypedArray(2, numVertices)
+
+    for (let y = 0; y <= subdivisionsHeight; y++) {
+      for (let x = 0; x <= subdivisionsAxis; x++) {
+        const u = x / subdivisionsAxis
+        const v = y / subdivisionsHeight
+        const theta = longRange * u
+        const phi = latRange * v
+        const sinTheta = Math.sin(theta)
+        const cosTheta = Math.cos(theta)
+        const sinPhi = Math.sin(phi)
+        const cosPhi = Math.cos(phi)
+        const ux = cosTheta * sinPhi
+        const uy = cosPhi
+        const uz = sinTheta * sinPhi
+        positions.push(radius * ux, radius * uy, radius * uz)
+        normals.push(ux, uy, uz)
+        texCoords.push(1 - u, v)
+      }
+    }
+
+    const numVertsAround = subdivisionsAxis + 1
+    const indices = this.createAugmentedTypedArray(3, subdivisionsAxis * subdivisionsHeight * 2, Uint16Array)
+    for (let x = 0; x < subdivisionsAxis; x++) {
+      for (let y = 0; y < subdivisionsHeight; y++) {
+        indices.push(
+          (y + 0) * numVertsAround + x,
+          (y + 0) * numVertsAround + x + 1,
+          (y + 1) * numVertsAround + x)
+
+        indices.push(
+          (y + 1) * numVertsAround + x,
+          (y + 0) * numVertsAround + x + 1,
+          (y + 1) * numVertsAround + x + 1)
+      }
+    }
+
+    return {
+      position: positions,
+      normal: normals,
+      texcoord: texCoords,
+      indices: indices
+    }
+  }
+}
+
+interface TruncatedConeSize {
+  bottomRadius: number,
+  topRadius: number,
+  height: number,
+  radialSubdivisions: number,
+  verticalSubdivisions: number,
+}
+
+export class TruncatedCone extends Primitive {
+  constructor (pgl: PikaGL, size: TruncatedConeSize) {
+    super(pgl, size)
+  }
+
+  createVertices (size: TruncatedConeSize) {
+    const { bottomRadius, topRadius, height, radialSubdivisions, verticalSubdivisions } = size
+
+    const extra = 2 + 2
+
+    const numVertices = (radialSubdivisions + 1) * (verticalSubdivisions + 1 + extra)
+    const positions = this.createAugmentedTypedArray(3, numVertices)
+    const normals = this.createAugmentedTypedArray(3, numVertices)
+    const texCoords = this.createAugmentedTypedArray(2, numVertices)
+    const indices = this.createAugmentedTypedArray(3, radialSubdivisions * (verticalSubdivisions + extra) * 2, Uint16Array)
+
+    const vertsAroundEdge = radialSubdivisions + 1
+
+    const slant = Math.atan2(bottomRadius - topRadius, height)
+    const cosSlant = Math.cos(slant)
+    const sinSlant = Math.sin(slant)
+
+    const start = -2
+    const end = verticalSubdivisions + 2
+
+    for (let y = start; y <= end; y++) {
+      let v = y / verticalSubdivisions
+      let u = height * v
+      let ringRadius
+      if (y < 0) {
+        u = 0
+        v = 1
+        ringRadius = bottomRadius
+      } else if (y > verticalSubdivisions) {
+        u = height
+        v = 1
+        ringRadius = topRadius
+      } else {
+        ringRadius = bottomRadius + (topRadius - bottomRadius) * (y / verticalSubdivisions)
+      }
+      if (y === -2 || y === verticalSubdivisions + 2) {
+        ringRadius = 0
+        v = 0
+      }
+      u -= height / 2
+      for (let i = 0; i < vertsAroundEdge; i++) {
+        const sin = Math.sin(i * Math.PI * 2 / radialSubdivisions)
+        const cos = Math.cos(i * Math.PI * 2 / radialSubdivisions)
+        positions.push(sin * ringRadius, u, cos * ringRadius)
+        normals.push(
+          (y < 0 || y > verticalSubdivisions) ? 0 : (sin * cosSlant),
+          (y < 0) ? -1 : (y > verticalSubdivisions ? 1 : sinSlant),
+          (y < 0 || y > verticalSubdivisions) ? 0 : (cos * cosSlant))
+        texCoords.push((i / radialSubdivisions), 1 - v)
+      }
+    }
+
+    for (let y = 0; y < verticalSubdivisions + extra; ++y) {
+      for (let i = 0; i < radialSubdivisions; i++) {
+        indices.push(vertsAroundEdge * (y + 0) + 0 + i,
+          vertsAroundEdge * (y + 0) + 1 + i,
+          vertsAroundEdge * (y + 1) + 1 + i)
+        indices.push(vertsAroundEdge * (y + 0) + 0 + i,
+          vertsAroundEdge * (y + 1) + 1 + i,
+          vertsAroundEdge * (y + 1) + 0 + i)
+      }
+    }
+
+    return {
+      position: positions,
+      normal: normals,
+      texcoord: texCoords,
+      indices: indices
+    }
+  }
+}
+
+interface CylinderSize extends PrimitiveSize {
+  radius: number,
+  height: number,
+  radialSubdivisions: number,
+  verticalSubdivisions: number,
+}
+
+export class Cylinder extends TruncatedCone {
+  constructor (pgl: PikaGL, size: CylinderSize) {
+    const truncatedSize: TruncatedConeSize = {
+      bottomRadius: size.radius,
+      topRadius: size.radius,
+      height: size.height,
+      radialSubdivisions: size.radialSubdivisions,
+      verticalSubdivisions: size.verticalSubdivisions
+    }
+    super(pgl, truncatedSize)
+  }
+}
+
+interface RegularPrismSize extends PrimitiveSize {
+  numSide: number,
+  width: number,
+  height: number,
+  verticalSubdivisions: number
+}
+
+export class RegularPrism extends Cylinder {
+  constructor (pgl: PikaGL, size: RegularPrismSize) {
+    const cylinderSize: CylinderSize = {
+      radius: size.width,
+      height: size.height,
+      radialSubdivisions: size.numSide,
+      verticalSubdivisions: size.verticalSubdivisions
+    }
+    super(pgl, cylinderSize)
+  }
+}
+
+interface PlaneSize extends PrimitiveSize {
   width: number,
   depth: number,
   subdivisionsWidth: number,
@@ -185,21 +395,13 @@ interface PlaneSize {
 }
 
 export class Plane extends Primitive {
-  private _planeSize: PlaneSize
-
-  constructor (pgl: PikaGL, planeSize: PlaneSize) {
-    super(pgl)
-    this._planeSize = planeSize
-    const arrays = this.createVertices(planeSize)
-    this._bufferInfo = this.createBufferInfo(arrays)
+  constructor (pgl: PikaGL, size: PlaneSize) {
+    super(pgl, size)
   }
 
-  get planeSize () {
-    return this._planeSize
-  }
+  createVertices (size: PlaneSize) {
+    const { width, depth, subdivisionsWidth, subdivisionsDepth, matrix } = size
 
-  createVertices (planeSize: PlaneSize) {
-    const { width, depth, subdivisionsWidth, subdivisionsDepth, matrix } = planeSize
     const numVertices = (subdivisionsWidth + 1) * (subdivisionsDepth + 1)
     const positions = this.createAugmentedTypedArray(3, numVertices)
     const normals = this.createAugmentedTypedArray(3, numVertices)
@@ -238,12 +440,11 @@ export class Plane extends Primitive {
       }
     }
 
-    const arrays = reorientVertices({
+    return reorientVertices({
       position: positions,
       normal: normals,
       texcoord: texcoords,
       indices: indices
     }, matrix)
-    return arrays
   }
 }

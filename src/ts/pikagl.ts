@@ -74,7 +74,7 @@ function guessNumComponentsFromName (name: string) {
   } else if (name.indexOf('color') >= 0) {
     numComponents = 4
   } else {
-    numComponents = 3 // position, normals, indices ...
+    numComponents = 3
   }
   return numComponents
 }
