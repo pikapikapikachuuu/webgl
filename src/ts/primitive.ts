@@ -4,44 +4,6 @@ import PikaGL from './pikagl'
 
 import * as m4 from '../3rd/m4'
 
-function applyFuncToV3Array (array, matrix, fn) {
-  const len = array.length
-  const tmp = new Float32Array(3)
-  for (let i = 0; i < len; i += 3) {
-    fn(matrix, [array[i], array[i + 1], array[i + 2]], tmp)
-    array[i] = tmp[0]
-    array[i + 1] = tmp[1]
-    array[i + 2] = tmp[2]
-  }
-}
-
-function transformNormal (mi, v, dst) {
-  dst = dst || new Float32Array(3)
-  const v0 = v[0]
-  const v1 = v[1]
-  const v2 = v[2]
-
-  dst[0] = v0 * mi[0 * 4 + 0] + v1 * mi[0 * 4 + 1] + v2 * mi[0 * 4 + 2]
-  dst[1] = v0 * mi[1 * 4 + 0] + v1 * mi[1 * 4 + 1] + v2 * mi[1 * 4 + 2]
-  dst[2] = v0 * mi[2 * 4 + 0] + v1 * mi[2 * 4 + 1] + v2 * mi[2 * 4 + 2]
-
-  return dst
-}
-
-function reorientVertices (arrays, matrix) {
-  Object.keys(arrays).forEach((name) => {
-    const array = arrays[name]
-    if (name.indexOf('pos') >= 0) {
-      applyFuncToV3Array(array, matrix, m4.transformPoint)
-    } else if (name.indexOf('tan') >= 0 || name.indexOf('binorm') >= 0) {
-      applyFuncToV3Array(array, matrix, m4.transformDirection)
-    } else if (name.indexOf('norm') >= 0) {
-      applyFuncToV3Array(array, m4.inverse(matrix), transformNormal)
-    }
-  })
-  return arrays
-}
-
 interface PrimitiveSize {}
 
 interface verticeArrays {
@@ -399,6 +361,44 @@ export class Plane extends Primitive {
     super(pgl, size)
   }
 
+  private reorientVertices (arrays: verticeArrays, matrix: m4.Matrix4) {
+    const applyFuncToV3Array = (array, matrix, fn) => {
+      const len = array.length
+      const tmp = new Float32Array(3)
+      for (let i = 0; i < len; i += 3) {
+        fn(matrix, [array[i], array[i + 1], array[i + 2]], tmp)
+        array[i] = tmp[0]
+        array[i + 1] = tmp[1]
+        array[i + 2] = tmp[2]
+      }
+    }
+
+    const transformNormal = (mi, v, dst) => {
+      dst = dst || new Float32Array(3)
+      const v0 = v[0]
+      const v1 = v[1]
+      const v2 = v[2]
+
+      dst[0] = v0 * mi[0 * 4 + 0] + v1 * mi[0 * 4 + 1] + v2 * mi[0 * 4 + 2]
+      dst[1] = v0 * mi[1 * 4 + 0] + v1 * mi[1 * 4 + 1] + v2 * mi[1 * 4 + 2]
+      dst[2] = v0 * mi[2 * 4 + 0] + v1 * mi[2 * 4 + 1] + v2 * mi[2 * 4 + 2]
+
+      return dst
+    }
+
+    Object.keys(arrays).forEach((name) => {
+      const array = arrays[name]
+      if (name.indexOf('pos') >= 0) {
+        applyFuncToV3Array(array, matrix, m4.transformPoint)
+      } else if (name.indexOf('tan') >= 0 || name.indexOf('binorm') >= 0) {
+        applyFuncToV3Array(array, matrix, m4.transformDirection)
+      } else if (name.indexOf('norm') >= 0) {
+        applyFuncToV3Array(array, m4.inverse(matrix), transformNormal)
+      }
+    })
+    return arrays
+  }
+
   createVertices (size: PlaneSize) {
     const { width, depth, subdivisionsWidth, subdivisionsDepth, matrix } = size
 
@@ -440,7 +440,7 @@ export class Plane extends Primitive {
       }
     }
 
-    return reorientVertices({
+    return this.reorientVertices({
       position: positions,
       normal: normals,
       texcoord: texcoords,

@@ -47,7 +47,7 @@ const textBufferInfo = new Plane(pgl, {
   matrix: m4.xRotation(Math.PI * 0.5)
 }).bufferInfo
 
-// Shared values
+// shared values
 const lightWorldPosition = [1, 8, -10]
 const lightColor = [1, 1, 1, 1]
 const camera = m4.identity()
@@ -60,13 +60,11 @@ const shapeTextures = [
   textureMaker.makeCircleTexture(),
   textureMaker.makeStripeTexture()
 ]
-const textTextures = [
-  '我是汉字',
-  '巧了我也是'
-].map((name) => textureMaker.makeTextTexture(name))
+const textTextures = ['幼圆', '隶书', '宋体', '黑体'].map(
+  (fontName) => textureMaker.makeTextTexture(fontName, { font: '32px ' + fontName })
+)
 
-const numObjects = 66
-const baseHue = rand(0, 360)
+const numObjects = 100
 
 const shapeObjects = []
 const shapeObjectsToDraw = []
@@ -74,7 +72,7 @@ for (let i = 0; i < numObjects; i++) {
   const uniforms = {
     u_lightWorldPos: lightWorldPosition,
     u_lightColor: lightColor,
-    u_diffuseMult: chroma.hsv((baseHue + rand(0, 20)) % 360, 0.4, 0.8).gl(),
+    u_diffuseMult: chroma.hsv(rand(0, 360), 0.4, 0.8).gl(),
     u_specular: [1, 1, 1, 1],
     u_shininess: 50,
     u_specularFactor: 1,
@@ -106,7 +104,7 @@ for (let i = 0; i < numObjects; i++) {
   const uniforms = {
     u_texture: textTexture,
     u_worldViewProjection: m4.identity(),
-    u_color: chroma.hsv((baseHue + rand(0, 60)) % 360, 1, 1).gl()
+    u_color: chroma.hsv(rand(0, 360), 1, 1).gl()
   }
   textObjectsToDraw.push({
     programInfo: textProgramInfo,
@@ -117,8 +115,8 @@ for (let i = 0; i < numObjects; i++) {
     xTrans: rand(-10, 10),
     yTrans: rand(-10, 10),
     zTrans: rand(-10, 10),
-    ySpeed: rand(0.1, 0.3),
-    zSpeed: rand(0.1, 0.3),
+    ySpeed: rand(0.1, 0.2),
+    zSpeed: rand(0.1, 0.2),
     uniforms: uniforms
   })
 }
@@ -172,7 +170,6 @@ const render = (time: number) => {
     m4.translate(world, object.xTrans, object.yTrans, object.zTrans, world)
     m4.xRotate(world, time, world)
     m4.multiply(view, world, world)
-
     m4.multiply(projection, world, uni.u_worldViewProjection)
   })
 

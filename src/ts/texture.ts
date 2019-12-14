@@ -44,7 +44,7 @@ export default class TextureMaker {
     const width = options.width || 2
     const height = options.height || 2
     const color1 = options.color1 || 'white'
-    const color2 = options.color2 || 'black'
+    const color2 = options.color2 || 'gray'
 
     this.setCanvas(width, height)
 
@@ -61,7 +61,7 @@ export default class TextureMaker {
     const width = options.width || 2
     const height = options.height || 2
     const color1 = options.color1 || 'white'
-    const color2 = options.color2 || 'black'
+    const color2 = options.color2 || 'gray'
 
     this.setCanvas(width, height)
 
@@ -79,7 +79,7 @@ export default class TextureMaker {
     const width = options.width || 128
     const height = options.height || 128
     const color1 = options.color1 || 'white'
-    const color2 = options.color2 || 'black'
+    const color2 = options.color2 || 'gray'
 
     this.setCanvas(width, height)
 
@@ -104,7 +104,7 @@ export default class TextureMaker {
     options = options || {}
     const width = options.width || 128
     const height = options.height || 32
-    const font = options.font || '20px 宋体'
+    const font = options.font || '28px 宋体'
 
     this.setCanvas(width, height)
 
