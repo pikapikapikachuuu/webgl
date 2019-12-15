@@ -159,14 +159,8 @@ interface SphereSize extends PrimitiveSize {
 }
 
 export class Sphere extends Primitive {
-  private _sphereSize: SphereSize
-
   constructor (pgl: PikaGL, size: SphereSize) {
     super(pgl, size)
-  }
-
-  get sphereSize () {
-    return this._sphereSize
   }
 
   createVertices (size: SphereSize) {
